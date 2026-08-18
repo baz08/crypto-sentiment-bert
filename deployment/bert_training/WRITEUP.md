@@ -80,14 +80,36 @@ changed:
   returned `"Postive"` instead of `"Positive"` from the live API — one
   character off, but visible in every positive prediction. Fixed.
 
-## Known follow-ups (not done here, out of scope for this cleanup)
+## Known follow-ups
 
 - No metrics from an actual training run are checked into the repo; run
   `berttest.py` to reproduce accuracy/F1 numbers for the current model
-  version.
-- `requirements.txt` for the API doesn't list `scikit-learn`, which is now
-  needed to run `berttest.py`'s evaluation step (training-only dependency,
-  not required by the served API).
+  version. (Deliberately not run as part of this cleanup pass — a real
+  fine-tuning run needs a GPU and a multi-GB TensorFlow/transformers
+  install to be worth the time.)
 - A fuller project report already exists at
   `deployment/docs/UCSD ML Capstone.pdf`, if a formal write-up is needed
   beyond this training summary.
+
+## Repo-wide cleanup (later pass)
+
+Beyond the training script itself, a follow-up pass fixed the rest of the
+repo for portfolio readiness:
+
+- `deployment/reddit/cleaner.py` imported a nonexistent `contractions`
+  module attribute, so the data pipeline (`merge_clean.py`) could never
+  actually run — switched to the real `contractions` pip package.
+- `deployment/reddit/redditpushshift.py` had a copy-paste bug where
+  `ETH_comments.csv` was silently populated with duplicated BTC data.
+- Split the single API `requirements.txt` (which mixed API, training, and
+  data-pipeline dependencies, several unused) into
+  `deployment/api/requirements.txt`, `deployment/bert_training/requirements.txt`,
+  and `deployment/reddit/requirements.txt`, and pinned `transformers`/
+  `tensorflow` (previously unpinned).
+- `predmodel.py`'s `Model` was instantiated eagerly at import time,
+  meaning importing the module at all — including for tests — downloaded
+  the full BERT model. It's now lazy (built on first request) and loads
+  its tokenizer from the fine-tuned Hub repo instead of the base
+  `bert-base-uncased` tokenizer.
+- Added `tests/` (mocking the model, so the suite runs in seconds) and a
+  GitHub Actions CI workflow.

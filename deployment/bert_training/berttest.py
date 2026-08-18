@@ -14,9 +14,7 @@ Usage:
 import argparse
 
 import pandas as pd
-import tensorflow as tf
 from sklearn import metrics
-from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 LABELS = ["Negative", "Neutral", "Positive"]
 BASE_MODEL = "bert-base-uncased"
@@ -31,12 +29,18 @@ def load_dataset(csv_path, text_column, label_column, test_size):
 
 
 def build_model():
+    # Imported lazily so this module stays importable (and load_dataset()/
+    # evaluate() stay unit-testable) without pulling in transformers/tensorflow.
+    from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
     model = TFAutoModelForSequenceClassification.from_pretrained(BASE_MODEL, num_labels=len(LABELS))
     return model, tokenizer
 
 
 def encode_dataset(tokenizer, texts, labels, max_length=MAX_LENGTH):
+    import tensorflow as tf
+
     encodings = tokenizer(
         list(texts), max_length=max_length, padding=True, truncation=True, return_tensors="tf"
     )
@@ -44,6 +48,8 @@ def encode_dataset(tokenizer, texts, labels, max_length=MAX_LENGTH):
 
 
 def train(model, tokenizer, train_df, test_df, text_column, label_column, epochs, batch_size):
+    import tensorflow as tf
+
     train_data = encode_dataset(tokenizer, train_df[text_column], train_df[label_column])
     train_data = train_data.shuffle(500).batch(batch_size)
 
@@ -59,6 +65,8 @@ def train(model, tokenizer, train_df, test_df, text_column, label_column, epochs
 
 
 def predict(model, tokenizer, texts, batch_size=100, max_length=MAX_LENGTH):
+    import tensorflow as tf
+
     predictions = []
     for start in range(0, len(texts), batch_size):
         batch = list(texts[start : start + batch_size])
