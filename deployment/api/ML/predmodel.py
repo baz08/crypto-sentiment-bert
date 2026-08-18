@@ -4,7 +4,7 @@ import tensorflow as tf
 
 path = "baz08/crypto-Bert-test"
 
-sentiments = ['Negative', 'Neutral', 'Postive']
+sentiments = ['Negative', 'Neutral', 'Positive']
 
 
 class Model:

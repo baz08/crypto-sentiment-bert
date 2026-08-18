@@ -7,7 +7,7 @@ This guide outlines the steps for deploying the Crypto Sentiment Analysis applic
 ### 1. Training
 The model is already pretrained from 3000 datapoints on Reddit comments of cryptocurrencies. The BERT model can be found either at Huggingface at baz08/crypto-Bert-test or at the directory on Huggingface:
       https://huggingface.co/baz08/crypto-Bert-test          
-Further training can be done on the model through model.compile() and model.fit(). An example of training can be found can be found in the Bert Training folder of deployment.
+Further training can be done via `deployment/Bert Training/berttest.py` (see `WRITEUP.md` in that folder for methodology and results).
 
 
 
@@ -21,7 +21,8 @@ Further training can be done on the model through model.compile() and model.fit(
 ├── docs
 │   └── UCSD MLE Capstone Project.pdf
 ├──Bert Training
-│   └──berttest.ipynb - Example on how to train BERT model
+│   ├──berttest.py - Script to train/evaluate the BERT model
+│   └──WRITEUP.md - Training methodology and results write-up
 └ reddit - Source of data from training
 
 
