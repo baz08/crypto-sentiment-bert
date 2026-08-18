@@ -10,7 +10,7 @@ crypto_list = [comment for comment in crypto]
 
 eth = api.search_comments(q=('ETH', 'ethereum'), subreddit="CryptoCurrency", filter=['ids', 'author', 'utc_datetime_str',
                                                                                      'body', 'subreddit'], limit=1000, since=1660037192)
-ETH_list = [comment for comment in crypto]
+ETH_list = [comment for comment in eth]
 
 
 crypto_df = pd.DataFrame(crypto_list)

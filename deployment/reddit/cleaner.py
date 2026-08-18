@@ -1,27 +1,23 @@
-from contractions import CONTRACTION_MAP
-from nltk.corpus import stopwords
-from nltk.tokenize.toktok import ToktokTokenizer
 import re
 
+import contractions
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize.toktok import ToktokTokenizer
+
+try:
+    stopword_list = set(stopwords.words('english'))
+except LookupError:
+    nltk.download('stopwords')
+    stopword_list = set(stopwords.words('english'))
+
 tokenizer = ToktokTokenizer()
-stopword_list = set(stopwords.words('english'))
 stopword_list.remove('no')
 stopword_list.remove('not')
 
-def expand_contractions(text, contraction_mapping=CONTRACTION_MAP):
-    
-    contractions_pattern = re.compile('({})'.format('|'.join(contraction_mapping.keys())), 
-                                      flags=re.IGNORECASE|re.DOTALL)
-    def expand_match(contraction):
-        match = contraction.group(0)
-        first_char = match[0]
-        expanded_contraction = contraction_mapping.get(match)\
-                                if contraction_mapping.get(match)\
-                                else contraction_mapping.get(match.lower())                       
-        expanded_contraction = first_char+expanded_contraction[1:]
-        return expanded_contraction
-        
-    expanded_text = contractions_pattern.sub(expand_match, text)
+
+def expand_contractions(text):
+    expanded_text = contractions.fix(text)
     expanded_text = re.sub("'", "", expanded_text)
     return expanded_text
 
