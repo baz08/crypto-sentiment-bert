@@ -1,0 +1,4 @@
+pmaw
+pandas==2.1.4
+nltk==3.8.1
+contractions==0.1.73

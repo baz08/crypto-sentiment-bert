@@ -7,7 +7,7 @@ COPY ./ /code/api
 RUN pip install --upgrade pip \
     && pip install -r /code/api/requirements.txt
 
-ENV PYHTONPATH=/code/api
+ENV PYTHONPATH=/code/api
 
 
 EXPOSE 8000

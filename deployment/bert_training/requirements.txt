@@ -1,0 +1,7 @@
+# Same TF/transformers pin as deployment/api/requirements.txt — see the
+# comment there for why TensorFlow is capped below 2.16.
+transformers==4.38.2
+tensorflow==2.15.0
+
+pandas==2.1.4
+scikit-learn==1.4.0

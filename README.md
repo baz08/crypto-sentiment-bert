@@ -1,42 +1,93 @@
-# Sentiment Analysis of Cryptocurrency Reddit Comments using BERT
+# Crypto Sentiment BERT
 
-## Crypto Sentiment Analysis Deployment Guide 
+Sentiment analysis (negative / neutral / positive) for cryptocurrency-related
+Reddit comments, powered by a `bert-base-uncased` model fine-tuned on ~3,000
+labeled comments and served behind a FastAPI endpoint.
 
-This guide outlines the steps for deploying the Crypto Sentiment Analysis application.
+The fine-tuned model is published at
+[`baz08/crypto-Bert-test`](https://huggingface.co/baz08/crypto-Bert-test) on
+the Hugging Face Hub.
 
-### 1. Training
-The model is already pretrained from 3000 datapoints on Reddit comments of cryptocurrencies. The BERT model can be found either at Huggingface at baz08/crypto-Bert-test or at the directory on Huggingface:
-      https://huggingface.co/baz08/crypto-Bert-test          
-Further training can be done via `deployment/Bert Training/berttest.py` (see `WRITEUP.md` in that folder for methodology and results).
+## Quickstart: run the API
 
+```bash
+cd deployment/api
+docker build -t crypto-sentiment-bert .
+docker run -p 8000:8000 crypto-sentiment-bert
+```
 
+The first run downloads the fine-tuned model from the Hugging Face Hub, so
+expect it to take a minute or two before the server is ready.
 
-### 2. Source Tree
+Once it's up:
 
-├── docker
-│   └──api - main.py
-│       └── ML
-│           ├──predmodel.py - BERT model loaded
-│           └── __init__.py     
-├── docs
-│   └── UCSD MLE Capstone Project.pdf
-├──Bert Training
-│   ├──berttest.py - Script to train/evaluate the BERT model
-│   └──WRITEUP.md - Training methodology and results write-up
-└ reddit - Source of data from training
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "I love bitcoin"}'
+# {"sentiment":"Positive"}
+```
 
+Interactive API docs (Swagger UI) are available at
+http://localhost:8000/docs, and a `GET /health` endpoint is available for
+readiness checks.
 
-### 3. FastAPI server
-Fast API server runs predictions on available devices and returns a sentiment. You can run the application through your terminal with the following:
+| URL              | Method | Description                                  |
+|-------------------|--------|-----------------------------------------------|
+| `/predict`         | POST   | Run sentiment analysis on the provided text   |
+| `/health`          | GET    | Liveness/readiness check                      |
+
+## Project structure
 
 ```
-docker run -p 8000:8000 deployment
+├── deployment
+│   ├── api                  - FastAPI service
+│   │   ├── main.py            - API routes
+│   │   ├── ML
+│   │   │   └── predmodel.py   - loads the fine-tuned BERT model from the Hub
+│   │   ├── Dockerfile
+│   │   └── requirements.txt
+│   ├── bert_training         - model training
+│   │   ├── berttest.py        - train/evaluate the classifier
+│   │   ├── requirements.txt
+│   │   └── WRITEUP.md         - training methodology and results
+│   ├── reddit                - data collection & preprocessing
+│   │   ├── redditpushshift.py - scrape comments from r/CryptoCurrency
+│   │   ├── cleaner.py         - text normalization utilities
+│   │   ├── merge_clean.py     - merge + label the training CSV
+│   │   └── requirements.txt
+│   └── docs
+│       └── UCSD ML Capstone.pdf
+└── tests                     - unit tests for the API and data pipeline
+```
 
-The following endpoints are available:
-|               URL           | Method |                 Description                 |
-|-----------------------------|--------|---------------------------------------------|
-|http://localhost:8000/predict| POST   | Run sentiment analysis on the provided text |
+## Training
 
-The api can be utilized and accessed through the link:  http://localhost:8000/docs
+The API loads an already fine-tuned model from the Hub, so training is only
+needed if you want to reproduce or improve it. See
+[`deployment/bert_training/WRITEUP.md`](deployment/bert_training/WRITEUP.md)
+for the full methodology, and run it with:
 
-FastAPI has an Automatic Documentation built in, making it incredibly easy to make a request through the api. 
+```bash
+cd deployment/bert_training
+pip install -r requirements.txt
+python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
+```
+
+`Crypto_c.csv` is produced by the data pipeline in `deployment/reddit`
+(`redditpushshift.py` → `cleaner.py` → `merge_clean.py`); see that folder's
+`requirements.txt` to run it.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Tests mock the BERT model itself (it's large and network-dependent), so they
+run in seconds without downloading any weights.
+
+## License
+
+[MIT](LICENSE)

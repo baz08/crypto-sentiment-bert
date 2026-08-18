@@ -1,12 +1,9 @@
 fastapi==0.92.0
 uvicorn==0.20.0
-transformers
-tensorflow
 pydantic==1.10.5
-pandas==1.3.4
-nltk==3.8.1
-datasets==2.8.0
-pytest==7.1.3
-requests
-pathlib
-gdown
+
+# Pinned below 2.16: transformers' TF* model classes need Keras 2, which
+# TensorFlow 2.16+ no longer ships by default (would require the extra
+# `tf-keras` compatibility package instead).
+transformers==4.38.2
+tensorflow==2.15.0
