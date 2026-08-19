@@ -16,11 +16,17 @@ d_df = d_df.drop(columns=['id', 'text', 'sentiment'])
 
 c_df = c_df.drop(columns=['Comment Text', 'URL'])
 
-gme_df = pd.concat([a_df, b_df, c_df, d_df])
+df = pd.concat([a_df, b_df, c_df, d_df])
 
-gme_df['body'] = normalize_corpus(gme_df['body'])
+df['body'] = normalize_corpus(df['body'])
 
-gme_df['body'] = gme_df['body'].replace(
+df['body'] = df['body'].replace(
     r'https\S+', '', regex=True).replace(r'www\S+', '', regex=True)
 
-gme_df.to_csv("./Crypto_c.csv", header=True, index=False)
+# DATA_COLUMN/LABEL_COLUMN matches what berttest.py expects. Subsetting to
+# just these two also drops BTC/ETH_comments.csv's `author` column, so the
+# merged training data doesn't carry Reddit usernames.
+df = df.rename(columns={'body': 'DATA_COLUMN', 'Sentiment': 'LABEL_COLUMN'})
+df = df[['DATA_COLUMN', 'LABEL_COLUMN']]
+
+df.to_csv("./Crypto_com.csv", header=True, index=False)

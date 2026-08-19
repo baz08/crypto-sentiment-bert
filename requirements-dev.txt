@@ -11,3 +11,5 @@ pandas==2.1.4
 scikit-learn==1.4.0
 nltk==3.8.1
 contractions==0.1.73
+matplotlib==3.8.4
+gradio==6.24.0

@@ -1,5 +1,7 @@
 # Crypto Sentiment BERT
 
+![CI](https://github.com/baz08/crypto-sentiment-bert/actions/workflows/ci.yml/badge.svg)
+
 Sentiment analysis (negative / neutral / positive) for cryptocurrency-related
 Reddit comments, powered by a `bert-base-uncased` model fine-tuned on ~3,000
 labeled comments and served behind a FastAPI endpoint.
@@ -8,7 +10,19 @@ The fine-tuned model is published at
 [`baz08/crypto-Bert-test`](https://huggingface.co/baz08/crypto-Bert-test) on
 the Hugging Face Hub.
 
-## Quickstart: run the API
+## Try it
+
+**Demo (Gradio):**
+
+```bash
+pip install -r demo/requirements.txt
+python demo/app.py
+```
+
+Also deployable as-is to a Hugging Face Space — point the Space's app file
+at `demo/app.py`.
+
+**API (Docker):**
 
 ```bash
 cd deployment/api
@@ -18,8 +32,6 @@ docker run -p 8000:8000 crypto-sentiment-bert
 
 The first run downloads the fine-tuned model from the Hugging Face Hub, so
 expect it to take a minute or two before the server is ready.
-
-Once it's up:
 
 ```bash
 curl -X POST http://localhost:8000/predict \
@@ -37,9 +49,29 @@ readiness checks.
 | `/predict`         | POST   | Run sentiment analysis on the provided text   |
 | `/health`          | GET    | Liveness/readiness check                      |
 
+## Results
+
+The dataset (2,994 labeled Reddit comments) is imbalanced — nearly half
+neutral:
+
+![Class distribution](deployment/bert_training/assets/class_distribution.png)
+
+As a reference point, a TF-IDF + logistic regression baseline
+(`deployment/bert_training/baseline.py`) gets **54.2% accuracy** (macro F1
+0.44) on a 500-row held-out split, and is weakest exactly where it matters —
+telling negative from neutral:
+
+![Confusion matrix](deployment/bert_training/assets/confusion_matrix.png)
+
+Full metrics table, methodology, and how BERT compares:
+[`deployment/bert_training/WRITEUP.md`](deployment/bert_training/WRITEUP.md).
+
 ## Project structure
 
 ```
+├── demo
+│   ├── app.py                - Gradio demo
+│   └── requirements.txt
 ├── deployment
 │   ├── api                  - FastAPI service
 │   │   ├── main.py            - API routes
@@ -48,7 +80,10 @@ readiness checks.
 │   │   ├── Dockerfile
 │   │   └── requirements.txt
 │   ├── bert_training         - model training
-│   │   ├── berttest.py        - train/evaluate the classifier
+│   │   ├── berttest.py        - train/evaluate the BERT classifier
+│   │   ├── baseline.py        - TF-IDF + logistic regression reference point
+│   │   ├── visualize.py       - regenerates the PNGs used above
+│   │   ├── assets/            - class distribution & confusion matrix PNGs
 │   │   ├── requirements.txt
 │   │   └── WRITEUP.md         - training methodology and results
 │   ├── reddit                - data collection & preprocessing
@@ -58,7 +93,7 @@ readiness checks.
 │   │   └── requirements.txt
 │   └── docs
 │       └── UCSD ML Capstone.pdf
-└── tests                     - unit tests for the API and data pipeline
+└── tests                     - unit tests for the API, demo, and data pipeline
 ```
 
 ## Training
@@ -71,10 +106,10 @@ for the full methodology, and run it with:
 ```bash
 cd deployment/bert_training
 pip install -r requirements.txt
-python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
+python berttest.py --data ../reddit/Crypto_com.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
 ```
 
-`Crypto_c.csv` is produced by the data pipeline in `deployment/reddit`
+`Crypto_com.csv` is produced by the data pipeline in `deployment/reddit`
 (`redditpushshift.py` → `cleaner.py` → `merge_clean.py`); see that folder's
 `requirements.txt` to run it.
 

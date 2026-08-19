@@ -1,0 +1,6 @@
+gradio==6.24.0
+
+# Same TF/transformers pin as deployment/api/requirements.txt — see the
+# comment there for why TensorFlow is capped below 2.16.
+transformers==4.38.2
+tensorflow==2.15.0

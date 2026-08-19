@@ -7,6 +7,7 @@ for path in [
     REPO_ROOT / "deployment" / "api",
     REPO_ROOT / "deployment" / "reddit",
     REPO_ROOT / "deployment" / "bert_training",
+    REPO_ROOT / "demo",
 ]:
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
