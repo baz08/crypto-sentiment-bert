@@ -24,7 +24,7 @@ jobs:
         run: python -m nltk.downloader stopwords
 
       - name: Compile-check every Python file
-        run: python -m compileall -q deployment tests
+        run: python -m compileall -q deployment demo tests
 
       - name: Run tests
         run: pytest -q

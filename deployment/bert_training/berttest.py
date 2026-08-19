@@ -7,8 +7,8 @@ optionally saves it locally and/or pushes it to the Hugging Face Hub (the
 deployed API at ``deployment/api`` loads the model from there).
 
 Usage:
-    python berttest.py --data ../reddit/Crypto_c.csv
-    python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
+    python berttest.py --data ../reddit/Crypto_com.csv
+    python berttest.py --data ../reddit/Crypto_com.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
 """
 
 import argparse
@@ -86,7 +86,7 @@ def evaluate(y_true, y_pred):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data", default="../reddit/Crypto_c.csv", help="Labeled CSV from reddit/merge_clean.py")
+    parser.add_argument("--data", default="../reddit/Crypto_com.csv", help="Labeled CSV from reddit/merge_clean.py")
     parser.add_argument("--text-column", default="DATA_COLUMN")
     parser.add_argument("--label-column", default="LABEL_COLUMN")
     parser.add_argument("--test-size", type=int, default=500, help="Number of rows held out for evaluation")

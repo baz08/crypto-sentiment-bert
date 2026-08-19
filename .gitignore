@@ -12,3 +12,6 @@ env/
 
 # fine-tuned model artifacts saved locally via --output-dir
 deployment/bert_training/model/
+
+# gradio's local cache dir when running demo/app.py
+.gradio/
