@@ -152,13 +152,22 @@ Before the BERT run, the baselines on the stratified test split (589 rows)
 are: majority class 47.2% accuracy / 0.214 macro-F1; TF-IDF + logistic
 regression 56.4% accuracy / 0.555 macro-F1.
 
+## First PyTorch run (Colab T4)
+
+| Model | Accuracy | Macro-F1 |
+|---|---:|---:|
+| Majority class | 47.2% | 0.214 |
+| TF-IDF + logistic regression | 56.4% | 0.555 |
+| BERT, epoch 1 | 60.3% | 0.578 |
+| BERT, epoch 2 (final) | 62.0% | 0.607 |
+
+Train loss fell from 1.01 (epoch 1) to 0.78 (epoch 2) and validation scores
+were still improving, so a 3–4 epoch run is worth trying. See the README
+for per-class and per-source results.
+
 ## Known follow-ups
 
-- No metrics from an actual training run are checked into the repo yet;
-  run `berttest.py` (a free Colab GPU is enough) and commit the resulting
-  `metrics.json` numbers to the README. (Deliberately not run as part of this cleanup pass — a real
-  fine-tuning run needs a GPU and a multi-GB TensorFlow/transformers
-  install to be worth the time.)
+- Metrics are from a single seed; averaging several runs would tighten them.
 - A fuller project report already exists at
   `deployment/docs/UCSD ML Capstone.pdf`, if a formal write-up is needed
   beyond this training summary.

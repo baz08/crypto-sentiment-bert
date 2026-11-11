@@ -7,6 +7,42 @@ labeled comments and served behind a FastAPI endpoint.
 The fine-tuned model is loaded from the Hugging Face Hub
 (`baz08/crypto-sentiment-bert` by default; set `MODEL_REPO` to override).
 
+## Results
+
+Evaluated on a held-out, label-stratified test set of 589 comments (20% of
+the data, seed 42), with two baselines for comparison:
+
+| Model | Accuracy | Macro-F1 | F1 Negative | F1 Neutral | F1 Positive |
+|---|---:|---:|---:|---:|---:|
+| Majority class (always "neutral") | 47.2% | 0.214 | 0.000 | 0.641 | 0.000 |
+| TF-IDF + logistic regression | 56.4% | 0.555 | 0.525 | 0.599 | 0.542 |
+| **Fine-tuned BERT** | **62.0%** | **0.607** | **0.586** | **0.663** | **0.573** |
+
+![Confusion matrices for TF-IDF + logistic regression and BERT](deployment/docs/images/confusion_matrix.png)
+
+- **BERT beats both baselines on every class**, but the margin over TF-IDF
+  is modest (+5.6 points of accuracy). With 589 test rows, a single run's
+  accuracy has an uncertainty of roughly ±4 points, so the gap is
+  suggestive rather than conclusive.
+- **Most errors involve the neutral class.** About a third of truly
+  negative and truly positive comments were predicted as neutral; BERT
+  rarely confuses positive with negative outright.
+- **Accuracy depends heavily on the data source:**
+
+  | Source | Test rows | BERT accuracy |
+  |---|---:|---:|
+  | `sentiment.csv` (positive/negative only) | 121 | 78.5% |
+  | `sentiment_labels.csv` | 195 | 62.6% |
+  | `ETH_comments.csv` | 105 | 61.9% |
+  | `BTC_comments.csv` | 168 | 49.4% |
+
+  The two-class source is easiest because it has no neutral examples to
+  confuse; the scraped BTC comments are hardest.
+
+Training: 2 epochs, batch size 16, AdamW (lr 2e-5, linear warmup/decay), max
+256 tokens, on a Colab T4 GPU in a few minutes. Full code, plots and error
+analysis are in [`notebooks/02_train_evaluate.ipynb`](notebooks/02_train_evaluate.ipynb).
+
 ## Run it on Google Colab
 
 | Notebook | What it does | Runtime |
@@ -68,6 +104,7 @@ readiness checks.
 │   │   ├── merge_clean.py     - merge the labeled sources into Crypto_c.csv
 │   │   └── requirements.txt
 │   └── docs
+│       ├── images             - figures used in this README
 │       └── UCSD ML Capstone.pdf
 ├── notebooks                 - Colab versions of the pipeline and training
 └── tests                     - unit tests for the API and data pipeline
@@ -121,6 +158,29 @@ pytest
 
 Tests mock the BERT model itself (it's large and network-dependent), so they
 run in seconds without downloading any weights.
+
+## Limitations
+
+- **Small, mixed-source dataset.** 2,942 labeled rows from four sources
+  that don't share a labeling scheme (one has no neutral class). Label
+  noise, especially around "neutral", likely caps accuracy as much as the
+  model does.
+- **Sarcasm and crypto slang.** "Great, another rug pull. Exactly what I
+  needed today." is predicted positive (85% confidence). Misspelled hype
+  ("Ethereum needs to pamp !") and buy-the-dip logic ("Maybe bitcoin will go
+  back down to 1 cent each. If it does I'm going to buy a bunch!") also trip
+  it up.
+- **Long posts are truncated** at 256 tokens (about 4% of rows).
+- **Frozen 2022 snapshot.** The comments come from mid-2022 and Pushshift
+  no longer serves Reddit data, so the model hasn't seen newer slang or
+  market conditions.
+- **Single run.** Results are from one seed; averaging several seeds (or
+  cross-validation) would give tighter numbers.
+
+**Next steps:** relabel a sample for consistent neutral guidelines; try 3–4
+epochs (validation scores were still rising after epoch 2) or a
+domain-specific model such as a Twitter/finance-pretrained RoBERTa; add a
+sarcasm-heavy evaluation set.
 
 ## License
 
