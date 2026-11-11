@@ -17,26 +17,39 @@ and served behind a FastAPI endpoint (see `deployment/api`).
    lowercases, strips special characters/URLs, and removes stopwords
    (keeping "no"/"not", since they carry sentiment).
 3. **Merging & labeling** — `deployment/reddit/merge_clean.py` combines the
-   scraped comments with the labeled sets (`sentiment.csv`,
-   `sentiment_labels.csv`), normalizes the text, and writes a single
-   `Crypto_c.csv` with a `DATA_COLUMN` (text) and `LABEL_COLUMN`
-   (0 = negative, 1 = neutral, 2 = positive).
+   labeled BTC/ETH comments with the other labeled sets (`sentiment.csv`,
+   `sentiment_labels.csv`), cleans the text with
+   `textprep.clean_for_model`, drops unlabeled/empty/duplicate rows, and
+   writes `Crypto_c.csv` with `DATA_COLUMN` (text), `LABEL_COLUMN`
+   (0 = negative, 1 = neutral, 2 = positive) and `source`.
 
-Training used ~3,000 labeled examples, split into a training set and a
-held-out evaluation set (500 rows by default).
+| source               | negative | neutral | positive | total |
+|----------------------|---------:|--------:|---------:|------:|
+| BTC_comments         | 194      | 432     | 209      | 835   |
+| ETH_comments         | 149      | 249     | 160      | 558   |
+| sentiment            | 256      | 0       | 295      | 551   |
+| sentiment_labels     | 78       | 707     | 213      | 998   |
+| **total**            | 677      | 1,388   | 877      | 2,942 |
+
+Note that `sentiment.csv` has no neutral class, so its labeling scheme
+differs from the other sources.
+
+The data is split 80/20 into train/test with a shuffled, label-stratified
+split (seed 42).
 
 ## Model
 
 - **Base**: `bert-base-uncased` via `TFAutoModelForSequenceClassification`
   (3-way classification head).
-- **Tokenization**: max length 230 tokens, truncated/padded.
+- **Tokenization**: max length 256 tokens, truncated/padded (same limit in the API).
 - **Optimizer**: Adam, lr `2e-5`, `epsilon=1e-08`, gradient clipping at
   `clipnorm=1.0` — standard low-LR BERT fine-tuning settings to avoid
   catastrophic forgetting of the pretrained weights.
 - **Loss**: sparse categorical cross-entropy.
 - **Epochs**: 2, batch size 16.
-- **Evaluation**: accuracy, confusion matrix, and per-class
-  precision/recall/F1 via `sklearn.metrics` on the held-out split.
+- **Evaluation**: accuracy, macro-F1, confusion matrix, and per-class
+  precision/recall/F1 on the held-out split, compared against a
+  majority-class baseline; written to `metrics.json`.
 
 Run it with:
 
@@ -80,11 +93,50 @@ changed:
   returned `"Postive"` instead of `"Positive"` from the live API — one
   character off, but visible in every positive prediction. Fixed.
 
+## Data & evaluation fixes (third pass)
+
+- **Evaluation split was not random.** `load_dataset` held out the last 500
+  rows. Because the merged CSV is ordered by source file, that test set came
+  from a single source and was ~75% neutral, while training data was far
+  more balanced. A leftover `train_pred` column in the old `Crypto_com.csv`
+  matched the labels on only ~67% of those rows, below the ~75% a model
+  that always predicts "neutral" would score. The split is now shuffled and
+  stratified, and every run reports a majority-class baseline next to the
+  model's scores.
+- **Training/serving skew.** The model was trained on heavily normalized
+  text (lowercased, stopwords and punctuation removed, contractions
+  expanded), but the API sent raw user text to the model. Both now use the
+  same light `clean_for_model` function (`deployment/reddit/textprep.py`,
+  copied into `deployment/api/ML/` because the Docker build only sees that
+  folder; a test fails if the copies drift). Stopword removal was dropped
+  for BERT input: words like "not" and punctuation carry sentiment.
+- **The pipeline didn't produce the training file.** `merge_clean.py`
+  wrote `body`/`Sentiment` columns plus scraper metadata, but `berttest.py`
+  reads `DATA_COLUMN`/`LABEL_COLUMN`, and the checked-in file was a stale
+  `Crypto_com.csv` with old prediction columns. `merge_clean.py` now writes
+  `Crypto_c.csv` in the right shape; `Crypto_com.csv` was removed.
+- **Mojibake** ("isnâ€™t") in ~175 rows of `sentiment_labels.csv` is now
+  repaired during cleaning, and Reddit HTML entities (`&gt;`, `&amp;#x200B;`)
+  are unescaped.
+- **`cleaner.py` bugs:** `[^a-zA-z...]` let `[ \ ] ^ _` and backticks through
+  (now `A-Z`); URLs were removed after punctuation stripping, so they
+  survived as tokens like `httpsexample com`; documents were silently
+  dropped when `stopword_removal=False`.
+- **`redditpushshift.py`** wrote unlabeled output over the labeled
+  `BTC_comments.csv`/`ETH_comments.csv`; it now writes `*_raw.csv`, and is
+  documented as historical since Pushshift access ended in 2023.
+- Max token length aligned at 256 for training and inference (was 230 vs
+  512).
+
+**The Hub model must be retrained** with the new pipeline before these
+changes help in production: the currently published weights were trained on
+the old heavily-normalized text and the old split.
+
 ## Known follow-ups
 
-- No metrics from an actual training run are checked into the repo; run
-  `berttest.py` to reproduce accuracy/F1 numbers for the current model
-  version. (Deliberately not run as part of this cleanup pass — a real
+- No metrics from an actual training run are checked into the repo yet;
+  run `berttest.py` (a free Colab GPU is enough) and commit the resulting
+  `metrics.json` numbers to the README. (Deliberately not run as part of this cleanup pass — a real
   fine-tuning run needs a GPU and a multi-GB TensorFlow/transformers
   install to be worth the time.)
 - A fuller project report already exists at

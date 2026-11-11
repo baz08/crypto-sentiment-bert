@@ -1,5 +1,9 @@
+from ML.textprep import clean_for_model
+
 HUB_REPO = "baz08/crypto-Bert-test"
 SENTIMENTS = ["Negative", "Neutral", "Positive"]
+# Keep in sync with MAX_LENGTH in deployment/bert_training/berttest.py.
+MAX_LENGTH = 256
 
 
 class Model:
@@ -15,11 +19,14 @@ class Model:
     def predict(self, text):
         import tensorflow as tf
 
+        # Same cleaning as the training data (see deployment/reddit/merge_clean.py),
+        # so the model sees the same kind of text it was trained on.
+        text = clean_for_model(text)
         encoded_text = self.tokenizer(
-            text, padding=True, truncation=True, max_length=512, return_tensors="tf"
+            text, padding=True, truncation=True, max_length=MAX_LENGTH, return_tensors="tf"
         )
         output = self.bert(encoded_text)
-        label = tf.argmax(tf.nn.softmax(output[0], axis=-1), axis=1).numpy()[0]
+        label = tf.argmax(output.logits, axis=-1).numpy()[0]
         return SENTIMENTS[label]
 
 

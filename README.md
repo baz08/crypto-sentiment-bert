@@ -44,7 +44,8 @@ readiness checks.
 │   ├── api                  - FastAPI service
 │   │   ├── main.py            - API routes
 │   │   ├── ML
-│   │   │   └── predmodel.py   - loads the fine-tuned BERT model from the Hub
+│   │   │   ├── predmodel.py   - loads the fine-tuned BERT model from the Hub
+│   │   │   └── textprep.py    - input cleaning (copy of reddit/textprep.py)
 │   │   ├── Dockerfile
 │   │   └── requirements.txt
 │   ├── bert_training         - model training
@@ -52,9 +53,11 @@ readiness checks.
 │   │   ├── requirements.txt
 │   │   └── WRITEUP.md         - training methodology and results
 │   ├── reddit                - data collection & preprocessing
-│   │   ├── redditpushshift.py - scrape comments from r/CryptoCurrency
-│   │   ├── cleaner.py         - text normalization utilities
-│   │   ├── merge_clean.py     - merge + label the training CSV
+│   │   ├── redditpushshift.py - how comments were scraped (Pushshift; no longer works)
+│   │   ├── *.csv              - frozen labeled data snapshot (2022)
+│   │   ├── textprep.py        - light cleaning used for training AND inference
+│   │   ├── cleaner.py         - bag-of-words normalization (for non-BERT baselines)
+│   │   ├── merge_clean.py     - merge the labeled sources into Crypto_c.csv
 │   │   └── requirements.txt
 │   └── docs
 │       └── UCSD ML Capstone.pdf
@@ -74,9 +77,29 @@ pip install -r requirements.txt
 python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
 ```
 
-`Crypto_c.csv` is produced by the data pipeline in `deployment/reddit`
-(`redditpushshift.py` → `cleaner.py` → `merge_clean.py`); see that folder's
-`requirements.txt` to run it.
+The script holds out a shuffled, label-stratified 20% test split (fixed
+seed), reports accuracy and macro-F1 alongside a majority-class baseline,
+and writes everything to `metrics.json`.
+
+### Data
+
+`deployment/reddit/Crypto_c.csv` (2,942 labeled comments/posts) is checked
+in and is built from four labeled sources by:
+
+```bash
+cd deployment/reddit
+python merge_clean.py
+```
+
+which also prints the label counts per source. The comments were originally
+collected from r/CryptoCurrency in 2022 with `redditpushshift.py`; Reddit
+shut off public Pushshift access in 2023, so the CSVs in that folder are a
+frozen snapshot rather than something that can be re-scraped.
+
+Training and the API clean text with the same function
+(`textprep.clean_for_model`), which only removes URLs, HTML entities, and
+encoding artifacts: stopwords, punctuation and casing are left in, since
+BERT uses them.
 
 ## Tests
 
