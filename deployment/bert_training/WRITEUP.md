@@ -165,6 +165,20 @@ Train loss fell from 1.01 (epoch 1) to 0.78 (epoch 2) and validation scores
 were still improving, so a 3–4 epoch run is worth trying. See the README
 for per-class and per-source results.
 
+## Hyperparameter search
+
+`search_hyperparameters()` (in `berttest.py`, mirrored in notebook 02,
+section 4) returns the best config:
+
+- Holds out a stratified 15% of the **training** data as a validation set;
+  the test set is only used once, for the final model.
+- Trains one model per combination of the grid (default: lr ∈ {1e-5, 2e-5,
+  3e-5, 5e-5} × batch size ∈ {16, 32}) for `max_epochs` (default 4),
+  scoring validation macro-F1 after every epoch, so epoch count is searched
+  without extra runs. Ties go to fewer epochs.
+- Caveat: the LR schedule decays over `max_epochs`, so "epoch 2 of a
+  4-epoch trial" approximates rather than exactly matches a 2-epoch run.
+
 ## Known follow-ups
 
 - Metrics are from a single seed; averaging several runs would tighten them.

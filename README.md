@@ -48,7 +48,7 @@ analysis are in [`notebooks/02_train_evaluate.ipynb`](notebooks/02_train_evaluat
 | Notebook | What it does | Runtime |
 |---|---|---|
 | [`01_data_pipeline`](notebooks/01_data_pipeline.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/baz08/crypto-sentiment-bert/blob/main/notebooks/01_data_pipeline.ipynb) | Cleans and merges the labeled sources into `Crypto_c.csv`, with label/length charts | CPU, < 1 min |
-| [`02_train_evaluate`](notebooks/02_train_evaluate.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/baz08/crypto-sentiment-bert/blob/main/notebooks/02_train_evaluate.ipynb) | Fine-tunes BERT, compares it with majority-class and TF-IDF baselines, error analysis, optional push to the Hub | T4 GPU, a few minutes |
+| [`02_train_evaluate`](notebooks/02_train_evaluate.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/baz08/crypto-sentiment-bert/blob/main/notebooks/02_train_evaluate.ipynb) | Optional hyperparameter search, fine-tunes BERT, compares it with majority-class and TF-IDF baselines, error analysis, optional push to the Hub | T4 GPU, a few minutes |
 
 Each notebook clones this repo for the data, so they run as-is with no setup.
 
@@ -122,6 +122,13 @@ cd deployment/bert_training
 pip install -r requirements.txt
 python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-sentiment-bert
 ```
+
+To tune hyperparameters first, add `--search`: it tries every learning rate ×
+batch size in the grid (scoring each epoch up to `--max-epochs`) on a
+validation split carved out of the training data, then trains the final
+model with the best config. The test set is never used for tuning. Use
+`--n-trials N` to try a random subset; the full default grid takes about
+30–40 minutes on a T4.
 
 Training uses PyTorch (`transformers` v5 dropped TensorFlow support). The
 script holds out a shuffled, label-stratified 20% test split (fixed
