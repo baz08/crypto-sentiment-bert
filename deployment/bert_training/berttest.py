@@ -1,14 +1,18 @@
 """Fine-tune a BERT sequence classifier for crypto Reddit comment sentiment.
 
 Trains a 3-class (negative / neutral / positive) classifier on top of
-``bert-base-uncased`` using the labeled CSV produced by
-``deployment/reddit/merge_clean.py``, evaluates it on a held-out split, and
-optionally saves it locally and/or pushes it to the Hugging Face Hub (the
-deployed API at ``deployment/api`` loads the model from there).
+``bert-base-uncased`` (PyTorch) using the labeled CSV produced by
+``deployment/reddit/merge_clean.py``, evaluates it on a held-out split
+against two baselines, and optionally saves it locally and/or pushes it to
+the Hugging Face Hub (the deployed API at ``deployment/api`` loads the model
+from there).
+
+The same steps, with plots and error analysis, are in
+``notebooks/02_train_evaluate.ipynb`` for running on Google Colab.
 
 Usage:
     python berttest.py --data ../reddit/Crypto_c.csv
-    python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
+    python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-sentiment-bert
 """
 
 import argparse
@@ -17,7 +21,10 @@ from pathlib import Path
 
 import pandas as pd
 from sklearn import metrics
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
 
 LABELS = ["Negative", "Neutral", "Positive"]
 BASE_MODEL = "bert-base-uncased"
@@ -45,60 +52,117 @@ def load_dataset(csv_path, text_column, label_column, test_size, seed=SEED):
     return train_df.reset_index(drop=True), test_df.reset_index(drop=True)
 
 
-def build_model():
-    # Imported lazily so this module stays importable (and load_dataset()/
-    # evaluate() stay unit-testable) without pulling in transformers/tensorflow.
-    from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
-    model = TFAutoModelForSequenceClassification.from_pretrained(BASE_MODEL, num_labels=len(LABELS))
-    return model, tokenizer
-
-
-def encode_dataset(tokenizer, texts, labels, max_length=MAX_LENGTH):
-    import tensorflow as tf
-
-    encodings = tokenizer(
-        list(texts), max_length=max_length, padding=True, truncation=True, return_tensors="tf"
-    )
-    return tf.data.Dataset.from_tensor_slices((dict(encodings), list(labels)))
-
-
-def train(model, tokenizer, train_df, test_df, text_column, label_column, epochs, batch_size):
-    import tensorflow as tf
-
-    train_data = encode_dataset(tokenizer, train_df[text_column], train_df[label_column])
-    train_data = train_data.shuffle(500).batch(batch_size)
-
-    val_data = encode_dataset(tokenizer, test_df[text_column], test_df[label_column]).batch(batch_size)
-
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=2e-5, epsilon=1e-08, clipnorm=1.0),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-        metrics=[tf.keras.metrics.SparseCategoricalAccuracy("accuracy")],
-    )
-    model.fit(train_data, epochs=epochs, validation_data=val_data)
-    return model
-
-
-def predict(model, tokenizer, texts, batch_size=100, max_length=MAX_LENGTH):
-    import tensorflow as tf
-
-    predictions = []
-    for start in range(0, len(texts), batch_size):
-        batch = list(texts[start : start + batch_size])
-        encodings = tokenizer(
-            batch, max_length=max_length, padding=True, truncation=True, return_tensors="tf"
-        )
-        logits = model(encodings).logits
-        predictions.extend(tf.argmax(logits, axis=-1).numpy())
-    return predictions
+# --- baselines ---------------------------------------------------------------
 
 
 def majority_baseline(y_train, y_true):
     """Predict the most common training label for every test row."""
     majority = pd.Series(list(y_train)).mode()[0]
     return [majority] * len(y_true)
+
+
+def tfidf_baseline(train_texts, train_labels, test_texts, seed=SEED):
+    """TF-IDF + logistic regression: the 'is BERT worth it?' comparison."""
+    clf = make_pipeline(
+        TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True),
+        LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
+    )
+    clf.fit(list(train_texts), list(train_labels))
+    return clf.predict(list(test_texts)).tolist()
+
+
+# --- BERT --------------------------------------------------------------------
+
+
+def build_model():
+    # Imported lazily so this module stays importable (and load_dataset()/
+    # evaluate() stay unit-testable) without pulling in torch/transformers.
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        BASE_MODEL,
+        num_labels=len(LABELS),
+        id2label=dict(enumerate(LABELS)),
+        label2id={label: i for i, label in enumerate(LABELS)},
+    )
+    return model, tokenizer
+
+
+def make_loader(tokenizer, texts, labels, batch_size, shuffle, seed=SEED):
+    import torch
+    from torch.utils.data import DataLoader
+    from transformers import DataCollatorWithPadding
+
+    encodings = tokenizer(list(texts), truncation=True, max_length=MAX_LENGTH)
+    items = [
+        {**{key: values[i] for key, values in encodings.items()}, "labels": int(label)}
+        for i, label in enumerate(labels)
+    ]
+    return DataLoader(
+        items,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=DataCollatorWithPadding(tokenizer),  # pads each batch to its longest row
+        generator=torch.Generator().manual_seed(seed),
+    )
+
+
+def train(model, tokenizer, train_df, test_df, text_column, label_column, epochs, batch_size, lr=2e-5, seed=SEED):
+    import torch
+    from transformers import get_linear_schedule_with_warmup
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+
+    train_loader = make_loader(tokenizer, train_df[text_column], train_df[label_column], batch_size, True, seed)
+    total_steps = len(train_loader) * epochs
+
+    # Standard BERT fine-tuning recipe: small LR, linear warmup/decay, and
+    # gradient clipping to avoid wrecking the pretrained weights.
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, eps=1e-8)
+    scheduler = get_linear_schedule_with_warmup(optimizer, int(0.1 * total_steps), total_steps)
+
+    for epoch in range(1, epochs + 1):
+        model.train()
+        running_loss = 0.0
+        for batch in train_loader:
+            batch = {key: value.to(device) for key, value in batch.items()}
+            loss = model(**batch).loss
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+            running_loss += loss.item()
+
+        val_pred = predict(model, tokenizer, test_df[text_column])
+        val_acc = metrics.accuracy_score(test_df[label_column], val_pred)
+        print(f"epoch {epoch}: train loss {running_loss / len(train_loader):.4f}  val accuracy {val_acc:.4f}")
+    return model
+
+
+def predict(model, tokenizer, texts, batch_size=64, max_length=MAX_LENGTH):
+    import torch
+
+    device = next(model.parameters()).device
+    model.eval()
+    texts = list(texts)
+    predictions = []
+    with torch.no_grad():
+        for start in range(0, len(texts), batch_size):
+            encodings = tokenizer(
+                texts[start : start + batch_size],
+                max_length=max_length,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+            ).to(device)
+            predictions.extend(model(**encodings).logits.argmax(dim=-1).cpu().tolist())
+    return predictions
+
+
+# --- evaluation --------------------------------------------------------------
 
 
 def compute_metrics(y_true, y_pred):
@@ -141,6 +205,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--output-dir", default=None, help="If set, save the fine-tuned model here")
     parser.add_argument("--push-to-hub", default=None, help="If set, push to this Hugging Face Hub repo id")
     parser.add_argument("--metrics-out", default="metrics.json", help="Where to write evaluation metrics as JSON")
@@ -150,24 +215,39 @@ def parse_args():
 def main():
     args = parse_args()
 
-    import tensorflow as tf
+    from transformers import set_seed
 
-    tf.keras.utils.set_random_seed(args.seed)
+    set_seed(args.seed)
 
     train_df, test_df = load_dataset(args.data, args.text_column, args.label_column, args.test_size, args.seed)
     print(f"train: {len(train_df)} rows, test: {len(test_df)} rows")
+
+    tfidf_pred = tfidf_baseline(train_df[args.text_column], train_df[args.label_column], test_df[args.text_column])
+
     model, tokenizer = build_model()
     model = train(
-        model, tokenizer, train_df, test_df, args.text_column, args.label_column, args.epochs, args.batch_size
+        model,
+        tokenizer,
+        train_df,
+        test_df,
+        args.text_column,
+        args.label_column,
+        args.epochs,
+        args.batch_size,
+        args.lr,
+        args.seed,
     )
 
     test_predictions = predict(model, tokenizer, test_df[args.text_column])
     results = evaluate(test_df[args.label_column], test_predictions, y_train=train_df[args.label_column])
+    results["tfidf_logreg"] = compute_metrics(test_df[args.label_column], tfidf_pred)
+    print(f"tfidf_logreg: accuracy {results['tfidf_logreg']['accuracy']:.4f}  macro-F1 {results['tfidf_logreg']['macro_f1']:.4f}")
     results["config"] = {
         "base_model": BASE_MODEL,
         "max_length": MAX_LENGTH,
         "epochs": args.epochs,
         "batch_size": args.batch_size,
+        "lr": args.lr,
         "seed": args.seed,
         "train_rows": len(train_df),
         "test_rows": len(test_df),

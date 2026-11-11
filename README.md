@@ -4,9 +4,17 @@ Sentiment analysis (negative / neutral / positive) for cryptocurrency-related
 Reddit comments, powered by a `bert-base-uncased` model fine-tuned on ~3,000
 labeled comments and served behind a FastAPI endpoint.
 
-The fine-tuned model is published at
-[`baz08/crypto-Bert-test`](https://huggingface.co/baz08/crypto-Bert-test) on
-the Hugging Face Hub.
+The fine-tuned model is loaded from the Hugging Face Hub
+(`baz08/crypto-sentiment-bert` by default; set `MODEL_REPO` to override).
+
+## Run it on Google Colab
+
+| Notebook | What it does | Runtime |
+|---|---|---|
+| [`01_data_pipeline`](notebooks/01_data_pipeline.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/baz08/crypto-sentiment-bert/blob/main/notebooks/01_data_pipeline.ipynb) | Cleans and merges the labeled sources into `Crypto_c.csv`, with label/length charts | CPU, < 1 min |
+| [`02_train_evaluate`](notebooks/02_train_evaluate.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/baz08/crypto-sentiment-bert/blob/main/notebooks/02_train_evaluate.ipynb) | Fine-tunes BERT, compares it with majority-class and TF-IDF baselines, error analysis, optional push to the Hub | T4 GPU, a few minutes |
+
+Each notebook clones this repo for the data, so they run as-is with no setup.
 
 ## Quickstart: run the API
 
@@ -61,6 +69,7 @@ readiness checks.
 │   │   └── requirements.txt
 │   └── docs
 │       └── UCSD ML Capstone.pdf
+├── notebooks                 - Colab versions of the pipeline and training
 └── tests                     - unit tests for the API and data pipeline
 ```
 
@@ -74,11 +83,13 @@ for the full methodology, and run it with:
 ```bash
 cd deployment/bert_training
 pip install -r requirements.txt
-python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
+python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-sentiment-bert
 ```
 
-The script holds out a shuffled, label-stratified 20% test split (fixed
-seed), reports accuracy and macro-F1 alongside a majority-class baseline,
+Training uses PyTorch (`transformers` v5 dropped TensorFlow support). The
+script holds out a shuffled, label-stratified 20% test split (fixed
+seed), reports accuracy and macro-F1 alongside a majority-class baseline and a
+TF-IDF + logistic regression baseline,
 and writes everything to `metrics.json`.
 
 ### Data
