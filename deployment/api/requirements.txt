@@ -2,8 +2,8 @@ fastapi==0.92.0
 uvicorn==0.20.0
 pydantic==1.10.5
 
-# Pinned below 2.16: transformers' TF* model classes need Keras 2, which
-# TensorFlow 2.16+ no longer ships by default (would require the extra
-# `tf-keras` compatibility package instead).
-transformers==4.38.2
-tensorflow==2.15.0
+# PyTorch backend (transformers v5 dropped TensorFlow). The Dockerfile
+# installs the CPU-only torch wheel first, so this pin is already satisfied
+# and pip doesn't pull the multi-GB CUDA build.
+torch==2.5.1
+transformers==4.46.3

@@ -5,8 +5,7 @@
 This project fine-tunes `bert-base-uncased` into a 3-class sentiment
 classifier (**negative / neutral / positive**) for cryptocurrency-related
 Reddit comments (BTC, ETH, and general crypto discussion). The fine-tuned
-model is published to the Hugging Face Hub at
-[`baz08/crypto-Bert-test`](https://huggingface.co/baz08/crypto-Bert-test)
+model is published to the Hugging Face Hub (`baz08/crypto-sentiment-bert`)
 and served behind a FastAPI endpoint (see `deployment/api`).
 
 ## Data pipeline
@@ -39,11 +38,11 @@ split (seed 42).
 
 ## Model
 
-- **Base**: `bert-base-uncased` via `TFAutoModelForSequenceClassification`
-  (3-way classification head).
+- **Base**: `bert-base-uncased` via `AutoModelForSequenceClassification`
+  (PyTorch, 3-way classification head).
 - **Tokenization**: max length 256 tokens, truncated/padded (same limit in the API).
-- **Optimizer**: Adam, lr `2e-5`, `epsilon=1e-08`, gradient clipping at
-  `clipnorm=1.0` — standard low-LR BERT fine-tuning settings to avoid
+- **Optimizer**: AdamW, lr `2e-5`, `eps=1e-08`, linear warmup (10% of
+  steps) then linear decay, gradient clipping at max norm 1.0 — standard low-LR BERT fine-tuning settings to avoid
   catastrophic forgetting of the pretrained weights.
 - **Loss**: sparse categorical cross-entropy.
 - **Epochs**: 2, batch size 16.
@@ -51,11 +50,12 @@ split (seed 42).
   precision/recall/F1 on the held-out split, compared against a
   majority-class baseline; written to `metrics.json`.
 
-Run it with:
+Run it with the Colab notebook `notebooks/02_train_evaluate.ipynb` (same
+code, plus plots and error analysis), or locally:
 
 ```bash
-pip install transformers tensorflow datasets scikit-learn pandas
-python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-Bert-test
+pip install -r requirements.txt
+python berttest.py --data ../reddit/Crypto_c.csv --output-dir ./model --push-to-hub baz08/crypto-sentiment-bert
 ```
 
 ## Cleanup notes (this pass)
@@ -132,13 +132,75 @@ changed:
 changes help in production: the currently published weights were trained on
 the old heavily-normalized text and the old split.
 
+## Move to PyTorch and Colab notebooks (fourth pass)
+
+`transformers` v5 (July 2026) removed TensorFlow support, and Colab now runs
+Python 3.12 / TensorFlow 2.19, so the old pins (TF 2.15, which doesn't
+support Python 3.12) couldn't be installed there. Training and the API were
+moved to PyTorch:
+
+- `berttest.py` uses `AutoModelForSequenceClassification` with a plain
+  PyTorch training loop (same hyperparameters, plus linear LR warmup/decay)
+  and adds a TF-IDF + logistic regression baseline.
+- The API loads the model with PyTorch on CPU; the Docker image installs
+  the CPU-only torch wheel and is based on `python:3.11-slim`. The Hub repo
+  is configurable with `MODEL_REPO` (default `baz08/crypto-sentiment-bert`).
+- `notebooks/01_data_pipeline.ipynb` and `notebooks/02_train_evaluate.ipynb`
+  run the whole pipeline on Colab with no local setup.
+
+Before the BERT run, the baselines on the stratified test split (589 rows)
+are: majority class 47.2% accuracy / 0.214 macro-F1; TF-IDF + logistic
+regression 56.4% accuracy / 0.555 macro-F1.
+
+## First PyTorch run (Colab T4)
+
+| Model | Accuracy | Macro-F1 |
+|---|---:|---:|
+| Majority class | 47.2% | 0.214 |
+| TF-IDF + logistic regression | 56.4% | 0.555 |
+| BERT, epoch 1 | 60.3% | 0.578 |
+| BERT, epoch 2 (final) | 62.0% | 0.607 |
+
+Train loss fell from 1.01 (epoch 1) to 0.78 (epoch 2) and validation scores
+were still improving, so a 3–4 epoch run is worth trying. See the README
+for per-class and per-source results.
+
+## Hyperparameter search
+
+`search_hyperparameters()` (in `berttest.py`, mirrored in notebook 02,
+section 4) returns the best config:
+
+- Holds out a stratified 15% of the **training** data as a validation set;
+  the test set is only used once, for the final model.
+- Trains one model per combination of the grid (default: lr ∈ {1e-5, 2e-5,
+  3e-5, 5e-5} × batch size ∈ {16, 32}) for `max_epochs` (default 4),
+  scoring validation macro-F1 after every epoch, so epoch count is searched
+  without extra runs. Ties go to fewer epochs.
+- Caveat: the LR schedule decays over `max_epochs`, so "epoch 2 of a
+  4-epoch trial" approximates rather than exactly matches a 2-epoch run.
+
+### Search results (Colab T4, torch 2.14 / transformers 4.57)
+
+| lr | batch | best epoch | val macro-F1 |
+|---|---:|---:|---:|
+| 2e-5 | 16 | 4 | **0.645** |
+| 5e-5 | 16 | 4 | 0.632 |
+| 3e-5 | 16 | 3 | 0.631 |
+| 3e-5 | 32 | 3 | 0.629 |
+| 5e-5 | 32 | 4 | 0.620 |
+| 2e-5 | 32 | 3 | 0.593 |
+| 1e-5 | 16 | 3 | 0.590 |
+| 1e-5 | 32 | 4 | 0.410 |
+
+Retraining on the full training set with lr 2e-5 / batch 16 / 4 epochs gave
+**63.2% accuracy / 0.624 macro-F1** on the test set (train loss 1.02 →
+0.39), up from 62.0% / 0.607 for the untuned 2-epoch run. Validation (0.645)
+came out a little above test (0.624), as expected after picking the best of
+8 configs on that validation set.
+
 ## Known follow-ups
 
-- No metrics from an actual training run are checked into the repo yet;
-  run `berttest.py` (a free Colab GPU is enough) and commit the resulting
-  `metrics.json` numbers to the README. (Deliberately not run as part of this cleanup pass — a real
-  fine-tuning run needs a GPU and a multi-GB TensorFlow/transformers
-  install to be worth the time.)
+- Metrics are from a single seed; averaging several runs would tighten them.
 - A fuller project report already exists at
   `deployment/docs/UCSD ML Capstone.pdf`, if a formal write-up is needed
   beyond this training summary.

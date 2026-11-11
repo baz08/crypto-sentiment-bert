@@ -72,3 +72,14 @@ def test_evaluate_reports_model_and_baseline(capsys):
     assert results["model"]["accuracy"] == 0.75
     assert results["majority_baseline"]["accuracy"] == 0.5
     assert "macro-F1" in capsys.readouterr().out
+
+
+def test_tfidf_baseline_learns_obvious_words():
+    from berttest import tfidf_baseline
+
+    train_texts = ["great pump moon", "great moon gains", "terrible crash dump", "terrible dump loss", "price is flat today", "price flat sideways"] * 3
+    train_labels = [2, 2, 0, 0, 1, 1] * 3
+
+    predictions = tfidf_baseline(train_texts, train_labels, ["great moon", "terrible dump", "flat price"])
+
+    assert predictions == [2, 0, 1]

@@ -1,4 +1,4 @@
-# Test dependencies. Deliberately excludes transformers/tensorflow: the API
+# Test dependencies. Deliberately excludes transformers/torch: the API
 # tests mock the BERT model instead of loading real weights, so the suite
 # runs in seconds without a multi-GB download.
 pytest==7.4.4
