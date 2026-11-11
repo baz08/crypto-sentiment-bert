@@ -1,3 +1,12 @@
+"""Classic bag-of-words text normalization (contractions, lowercase,
+special characters, stopwords).
+
+NOTE: this is NOT what the BERT model is trained on any more -- see
+``textprep.clean_for_model``. Stopword and punctuation removal throw away
+signal a transformer can use, so these helpers are kept only for
+traditional (TF-IDF / bag-of-words) baselines and exploratory analysis.
+"""
+
 import re
 
 import contractions
@@ -31,8 +40,15 @@ def remove_stopwords(text, is_lower_case=False):
     filtered_text = ' '.join(filtered_tokens)    
     return filtered_text
 
+URL_PATTERN = re.compile(r'(https?://\S+|www\.\S+)', flags=re.IGNORECASE)
+
+
+def remove_urls(text):
+    return URL_PATTERN.sub(' ', text)
+
 def remove_special_characters(text, remove_digits= False):
-    pattern = r'[^a-zA-z0-9\s]' if not remove_digits else r'[^a-zA-z\s]'
+    # A-Z, not A-z: the A-z range also matches [ \ ] ^ _ and backtick.
+    pattern = r'[^a-zA-Z0-9\s]' if not remove_digits else r'[^a-zA-Z\s]'
     text = re.sub(pattern, '', text)
     return text
 
@@ -49,8 +65,11 @@ def normalize_corpus(corpus, contraction_expansion=True,
         # lowercase the text    
         if text_lower_case:
             doc = doc.lower()
+        # strip URLs first -- after special-character removal they turn
+        # into junk tokens like "httpsexample com"
+        doc = remove_urls(doc)
         # remove extra newlines
-        doc = re.sub(r'[\r|\n|\r\n]+', ' ',doc)
+        doc = re.sub(r'[\r\n]+', ' ', doc)
         if special_char_removal:
             # insert spaces between special characters to isolate them    
             special_char_pattern = re.compile(r'([{.(-)!}])')
@@ -61,6 +80,6 @@ def normalize_corpus(corpus, contraction_expansion=True,
         # remove stopwords
         if stopword_removal:
             doc = remove_stopwords(doc, is_lower_case=text_lower_case)
-            normalized_corpus.append(doc)
-        
+        normalized_corpus.append(doc.strip())
+
     return normalized_corpus

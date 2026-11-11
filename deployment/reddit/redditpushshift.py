@@ -1,6 +1,19 @@
+"""Scrape BTC / ETH comments from r/CryptoCurrency via the Pushshift API.
+
+HISTORICAL ONLY: Reddit cut off public Pushshift access in May 2023, so this
+script no longer returns data. It is kept to document how the comments in
+BTC_comments.csv / ETH_comments.csv were collected (comments since
+2022-08-09, bot account CointestMod excluded). Treat those CSVs as a frozen
+snapshot.
+
+The scraped comments had no labels; the Sentiment column in
+BTC_comments.csv / ETH_comments.csv was added afterwards. This script
+therefore writes to *_raw.csv so re-running it can never overwrite the
+labeled files.
+"""
+
 from pmaw import PushshiftAPI
 import pandas as pd
-import json
 
 api = PushshiftAPI()
 
@@ -21,5 +34,5 @@ crypto_df = crypto_df[crypto_df['author'].str.contains('CointestMod') == False]
 eth_df = eth_df[eth_df['author'].str.contains('CointestMod') == False]
 
 
-crypto_df.to_csv('./BTC_comments.csv', header=True, index=False)
-eth_df.to_csv('./ETH_comments.csv', header=True, index=False)
+crypto_df.to_csv('./BTC_comments_raw.csv', header=True, index=False)
+eth_df.to_csv('./ETH_comments_raw.csv', header=True, index=False)
