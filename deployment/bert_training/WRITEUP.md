@@ -179,6 +179,25 @@ section 4) returns the best config:
 - Caveat: the LR schedule decays over `max_epochs`, so "epoch 2 of a
   4-epoch trial" approximates rather than exactly matches a 2-epoch run.
 
+### Search results (Colab T4, torch 2.14 / transformers 4.57)
+
+| lr | batch | best epoch | val macro-F1 |
+|---|---:|---:|---:|
+| 2e-5 | 16 | 4 | **0.645** |
+| 5e-5 | 16 | 4 | 0.632 |
+| 3e-5 | 16 | 3 | 0.631 |
+| 3e-5 | 32 | 3 | 0.629 |
+| 5e-5 | 32 | 4 | 0.620 |
+| 2e-5 | 32 | 3 | 0.593 |
+| 1e-5 | 16 | 3 | 0.590 |
+| 1e-5 | 32 | 4 | 0.410 |
+
+Retraining on the full training set with lr 2e-5 / batch 16 / 4 epochs gave
+**63.2% accuracy / 0.624 macro-F1** on the test set (train loss 1.02 →
+0.39), up from 62.0% / 0.607 for the untuned 2-epoch run. Validation (0.645)
+came out a little above test (0.624), as expected after picking the best of
+8 configs on that validation set.
+
 ## Known follow-ups
 
 - Metrics are from a single seed; averaging several runs would tighten them.

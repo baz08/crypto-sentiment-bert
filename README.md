@@ -16,32 +16,47 @@ the data, seed 42), with two baselines for comparison:
 |---|---:|---:|---:|---:|---:|
 | Majority class (always "neutral") | 47.2% | 0.214 | 0.000 | 0.641 | 0.000 |
 | TF-IDF + logistic regression | 56.4% | 0.555 | 0.525 | 0.599 | 0.542 |
-| **Fine-tuned BERT** | **62.0%** | **0.607** | **0.586** | **0.663** | **0.573** |
+| **Fine-tuned BERT (tuned)** | **63.2%** | **0.624** | **0.608** | **0.664** | **0.599** |
 
 ![Confusion matrices for TF-IDF + logistic regression and BERT](deployment/docs/images/confusion_matrix.png)
 
-- **BERT beats both baselines on every class**, but the margin over TF-IDF
-  is modest (+5.6 points of accuracy). With 589 test rows, a single run's
-  accuracy has an uncertainty of roughly ±4 points, so the gap is
-  suggestive rather than conclusive.
-- **Most errors involve the neutral class.** About a third of truly
-  negative and truly positive comments were predicted as neutral; BERT
-  rarely confuses positive with negative outright.
+- **BERT beats both baselines on every class**: +6.8 points of accuracy and
+  +0.07 macro-F1 over TF-IDF. With 589 test rows, one run's accuracy is
+  uncertain by roughly ±4 points, so treat the exact margin as approximate.
+- **Most errors involve the neutral class.** 28% of truly negative and 30%
+  of truly positive comments were predicted neutral, while only about 10%
+  were flipped to the opposite sentiment.
 - **Accuracy depends heavily on the data source:**
 
   | Source | Test rows | BERT accuracy |
   |---|---:|---:|
-  | `sentiment.csv` (positive/negative only) | 121 | 78.5% |
-  | `sentiment_labels.csv` | 195 | 62.6% |
-  | `ETH_comments.csv` | 105 | 61.9% |
-  | `BTC_comments.csv` | 168 | 49.4% |
+  | `sentiment.csv` (positive/negative only) | 121 | 81.0% |
+  | `sentiment_labels.csv` | 195 | 63.1% |
+  | `ETH_comments.csv` | 105 | 59.0% |
+  | `BTC_comments.csv` | 168 | 53.0% |
 
   The two-class source is easiest because it has no neutral examples to
   confuse; the scraped BTC comments are hardest.
 
-Training: 2 epochs, batch size 16, AdamW (lr 2e-5, linear warmup/decay), max
-256 tokens, on a Colab T4 GPU in a few minutes. Full code, plots and error
-analysis are in [`notebooks/02_train_evaluate.ipynb`](notebooks/02_train_evaluate.ipynb).
+### Hyperparameter search
+
+Learning rate and batch size were tuned on a validation split carved out of
+the training data (15%, never the test set), training each combination for
+up to 4 epochs and scoring macro-F1 after every epoch:
+
+![Validation macro-F1 by epoch for each learning rate and batch size](deployment/docs/images/hyperparameter_search.png)
+
+The best config was **lr 2e-5, batch size 16, 4 epochs** (validation
+macro-F1 0.645). Most settings level off around 0.60–0.63 by epoch 3; the
+clear outlier is lr 1e-5 with batch size 32, which learns too slowly to
+converge in 4 epochs. Tuning improved the test score over the untuned
+2-epoch run (62.0% / 0.607) by about one point, which is within run-to-run
+noise: the main gain came from training longer.
+
+Final training: 4 epochs, batch size 16, AdamW (lr 2e-5, weight decay 0.01,
+linear warmup/decay), max 256 tokens, on a Colab T4 GPU. Full code, plots
+and error analysis are in
+[`notebooks/02_train_evaluate.ipynb`](notebooks/02_train_evaluate.ipynb).
 
 ## Run it on Google Colab
 
@@ -181,11 +196,11 @@ run in seconds without downloading any weights.
 - **Frozen 2022 snapshot.** The comments come from mid-2022 and Pushshift
   no longer serves Reddit data, so the model hasn't seen newer slang or
   market conditions.
-- **Single run.** Results are from one seed; averaging several seeds (or
+- **Single run.** Results are from one seed (and the best search config
+  sat at the 4-epoch limit, so 5–6 epochs may help slightly); averaging several seeds (or
   cross-validation) would give tighter numbers.
 
-**Next steps:** relabel a sample for consistent neutral guidelines; try 3–4
-epochs (validation scores were still rising after epoch 2) or a
+**Next steps:** relabel a sample for consistent neutral guidelines; try a
 domain-specific model such as a Twitter/finance-pretrained RoBERTa; add a
 sarcasm-heavy evaluation set.
 
